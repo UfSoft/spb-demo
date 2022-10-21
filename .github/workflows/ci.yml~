@@ -46,40 +46,6 @@ jobs:
               - added|modified:
                 - .pylintrc
 
-  pre-commit:
-    name: Pre-Commit
-    uses: ./.github/workflows/pre-commit-action.yml
-    needs:
-      - get-changed-files
-    with:
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
-
-  docs:
-    name: Build Docs
-    uses: ./.github/workflows/docs-action.yml
-    needs:
-      - get-changed-files
-    with:
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
-
-  lint:
-    name: Lint
-    uses: ./.github/workflows/lint-action.yml
-    needs:
-      - get-changed-files
-    with:
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
-
-  debian-11:
-    name: Debian 11
-    needs:
-      - get-changed-files
-    uses: ./.github/workflows/test-action.yml
-    with:
-      distro-slug: debian-11
-      nox-session: ci-test-3
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
-
   debian-11-arm64:
     name: Debian 11 ARM64
     needs:
@@ -100,26 +66,6 @@ jobs:
       nox-session: ci-test-3
       changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
 
-  windows-2019:
-    name: Windows 2019
-    needs:
-      - get-changed-files
-    uses: ./.github/workflows/test-action.yml
-    with:
-      distro-slug: windows-2019
-      nox-session: ci-test-3
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
-
-  macos-12:
-    name: MacOS 12
-    needs:
-      - get-changed-files
-    uses: ./.github/workflows/test-action-macos.yml
-    with:
-      distro-slug: macos-12
-      nox-session: ci-test-3
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
-
 
   set-pipeline-exit-status:
     # This step is just so we can make github require this step, to pass checks
@@ -128,14 +74,8 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs:
-      - pre-commit
-      - docs
-      - lint
-      - debian-11
       - debian-11-arm64
       - ubuntu-2204
-      - windows-2019
-      - macos-12
     steps:
     - name: Download Exit Status Files
       if: always()

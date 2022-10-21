@@ -17,34 +17,9 @@ jobs:
     outputs:
       changed-files: ${{ toJSON(steps.changed-files.outputs) }}
     steps:
-      - name: Get Changed Files
-        id: changed-files
-        uses: dorny/paths-filter@v2
-        with:
-          token: ${{ github.token }}
-          list-files: json
-          filters: |
-            repo:
-              - added|modified:
-                - '**'
-            deleted:
-              - deleted:
-                - '**'
-            docs:
-              - doc/**
-            salt:
-              - added|modified:
-                - setup.py
-                - noxfile.py
-                - salt/**/*.py
-                - tasks/**/*.py
-                - tools/**/*.py
-            tests:
-              - added|modified:
-                - tests/**/*.py
-            pylintrc:
-              - added|modified:
-                - .pylintrc
+      - name: First Stage
+        run: |
+          echo "first stage"
 
   debian-11-arm64:
     name: Debian 11 ARM64
@@ -54,7 +29,6 @@ jobs:
     with:
       distro-slug: debian-11-arm64
       nox-session: ci-test-3
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
 
   ubuntu-2204:
     name: Ubuntu 22.04
@@ -64,7 +38,6 @@ jobs:
     with:
       distro-slug: ubuntu-22.04
       nox-session: ci-test-3
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
 
 
   set-pipeline-exit-status:

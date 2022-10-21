@@ -11,10 +11,6 @@ on:
         required: true
         type: string
         description: The nox session to run
-      changed-files:
-        required: true
-        type: string
-        description: JSON string containing information about changed files
 
 
 env:
