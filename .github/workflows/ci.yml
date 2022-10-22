@@ -21,6 +21,15 @@ jobs:
         run: |
           echo "first stage"
 
+  debian-11:
+    name: Debian 11
+    needs:
+      - get-changed-files
+    uses: ./.github/workflows/test-action-fail.yml
+    with:
+      distro-slug: debian-11
+      nox-session: ci-test-3
+
   debian-11-arm64:
     name: Debian 11 ARM64
     needs:
@@ -47,6 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs:
+      - debian-11
       - debian-11-arm64
       - ubuntu-2204
     steps:
