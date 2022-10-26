@@ -80,6 +80,10 @@ jobs:
         run: |
           python3 -m pip install -r requirements/tools.txt
 
+      - name: Test Python Tools Scripts
+        run: |
+          python3 -c 'import tools'
+
       - name: Start VM
         run: |
           tools --timestamps vm create --destroy-on-failure ${{ inputs.distro-slug }}
