@@ -34,7 +34,7 @@ jobs:
 
       - name: Sleep It Off
         run: |
-          sleep 10
+          sleep 5
 
       - name: Set Exit Status
         if: always()
