@@ -34,7 +34,7 @@ jobs:
 
       - name: Sleep It Off
         run: |
-          sleep 60
+          sleep 10
 
       - name: Set Exit Status
         if: always()
@@ -56,6 +56,7 @@ jobs:
       - self-hosted
       - linux
       - arm64
+      - bastion
     timeout-minutes: 600  # 10 Hours
     needs:
       - dependencies
@@ -70,13 +71,22 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v3
 
-      - name: Environment
+      - name: Install Python Tools Scripts
         run: |
-          env
+          python3 -m pip install -r requirements/tools.txt
 
-      - name: Sleep It Off
+      - name: Start VM
         run: |
-          sleep 60
+          tools --timestamps vm create --destroy-on-failure ${{ inputs.distro-slug }}
+
+      - name: Upload Checkout To VM
+        run: |
+          tools --timestamps vm rsync ${{ inputs.distro-slug }}
+
+      - name: Destroy VM
+        if: always()
+        run: |
+          tools --timestamps vm destroy ${{ inputs.distro-slug }}
 
       - name: Set Exit Status
         if: always()
