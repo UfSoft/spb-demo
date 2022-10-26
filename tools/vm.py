@@ -19,7 +19,6 @@ import time
 from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, cast
-from ec2_metadata import ec2_metadata
 
 from ptscripts import Context, command_group
 
@@ -51,15 +50,6 @@ REPO_CHECKOUT_ID = hashlib.sha256(
     "|".join(list(platform.uname()) + [str(REPO_ROOT)]).encode()
 ).hexdigest()
 
-CI_RUN = os.environ.get("CI") is not None
-
-if CI_RUN:
-    key_name = ec2_metadata.instance_id
-    default_region = ec2_metadata.region
-else:
-    key_name = None
-    default_region = "eu-central-1"
-
 # Define the command group
 vm = command_group(name="vm", help="VM Related Commands", description=__doc__)
 vm.add_argument("--region", help="The AWS region.", default="eu-central-1")
@@ -87,7 +77,7 @@ vm.add_argument("--region", help="The AWS region.", default="eu-central-1")
 def create(
     ctx: Context,
     name: str,
-    key_name: str = key_name,
+    key_name: str = os.environ.get("RUNNER_NAME"),
     instance_type: str = None,
     destroy_on_failure: bool = False,
 ):
