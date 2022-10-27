@@ -84,6 +84,11 @@ jobs:
         run: |
           python3 -c 'import tools'
 
+      - name: Test Python Tools VM Scripts
+        run: |
+          tools vm --help
+          tools vm create --help
+
       - name: Start VM
         run: |
           tools --timestamps vm create --destroy-on-failure ${{ inputs.distro-slug }}
