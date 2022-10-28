@@ -91,7 +91,7 @@ jobs:
 
       - name: Start VM
         run: |
-          tools --timestamps vm create --destroy-on-failure ${{ inputs.distro-slug }}
+          tools --debug --timestamps vm create --destroy-on-failure ${{ inputs.distro-slug }}
 
       - name: Upload Checkout To VM
         run: |
