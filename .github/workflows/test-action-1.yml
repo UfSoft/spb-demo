@@ -1,0 +1,82 @@
+name: Test Artifact
+
+on:
+  workflow_call:
+    inputs:
+      distro-slug:
+        required: true
+        type: string
+        description: The OS slug to run tests against
+      nox-session:
+        required: true
+        type: string
+        description: The nox session to run
+
+
+env:
+  NOX_VERSION: "2022.8.7"
+  COLUMNS: 160
+
+jobs:
+
+  test:
+    name: Test
+    runs-on:
+      - self-hosted
+      - linux
+      - bastion
+    timeout-minutes: 600  # 10 Hours
+    strategy:
+      fail-fast: false
+      matrix:
+        tests-chunk:
+          - unit
+          - functional
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install Python Tools Scripts
+        run: |
+          python3 -m pip install -r requirements/tools.txt
+
+      - name: Test Python Tools Scripts
+        run: |
+          python3 -c 'import tools'
+
+      - name: List Keys
+        run: |
+          ssh-add -L
+
+      - name: Start VM
+        run: |
+          tools --debug --timestamps vm create --destroy-on-failure ${{ inputs.distro-slug }}
+
+      - name: Upload Checkout To VM
+        run: |
+          tools --timestamps vm rsync ${{ inputs.distro-slug }}
+
+      - name: Destroy VM
+        if: always()
+        run: |
+          tools --timestamps vm destroy ${{ inputs.distro-slug }}
+
+      - name: Set Exit Status
+        if: always()
+        run: |
+          mkdir exitstatus
+          echo "${{ job.status }}" > exitstatus/${{ github.job }}-${{ inputs.distro-slug }}-deps
+
+      - name: Upload Exit Status
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: exitstatus
+          path: exitstatus
+          if-no-files-found: error
