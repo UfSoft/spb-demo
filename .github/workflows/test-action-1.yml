@@ -51,7 +51,7 @@ jobs:
 
       - name: List Keys
         run: |
-          ssh-add -L
+          ssh-add -L || true
 
       - name: Start VM
         run: |
