@@ -572,7 +572,6 @@ class VM:
         with progress:
             start = time.time()
             create_kwargs = dict(
-                ImageId=self.config.ami,
                 MinCount=1,
                 MaxCount=1,
                 KeyName=key_name,
@@ -582,7 +581,9 @@ class VM:
                         "Tags": tags,
                     }
                 ],
-                LaunchTemplate={"LaunchTemplateName": self.config.ami},
+                LaunchTemplate={
+                    "LaunchTemplateName": f"{self.config.ami}-salt-project-golden-image-launch-template"
+                },
             )
             if instance_type:
                 # The user provided a custom instance type
