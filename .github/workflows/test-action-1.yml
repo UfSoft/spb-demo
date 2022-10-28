@@ -31,7 +31,6 @@ jobs:
       matrix:
         tests-chunk:
           - unit
-          - functional
 
     steps:
       - name: Checkout Source Code

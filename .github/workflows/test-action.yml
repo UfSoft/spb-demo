@@ -64,7 +64,6 @@ jobs:
       fail-fast: false
       matrix:
         tests-chunk:
-          - unit
           - functional
 
     steps:
