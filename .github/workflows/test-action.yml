@@ -70,15 +70,6 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v3
 
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.9"
-
-      - name: Install Python Tools Scripts
-        run: |
-          python3 -m pip install -r requirements/tools.txt
-
       - name: Test Python Tools Scripts
         run: |
           python3 -c 'import tools'
