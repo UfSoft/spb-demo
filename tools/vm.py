@@ -658,6 +658,7 @@ class VM:
                         self.ssh_command_args(
                             "exit", "0", log_command_level=logging.DEBUG,
                             ssh_options=[
+                                "-oLogLevel=INFO",
                                 "-oConnectTimeout=5",
                                 "-oConnectionAttempts=1",
                             ]
@@ -685,7 +686,7 @@ class VM:
                     proc = None
                     if time.time() - wait_start < 1:
                         # Process exited too fast, sleep a little longer
-                        time.sleep(1)
+                        time.sleep(3)
                 except subprocess.TimeoutExpired:
                     pass
 
