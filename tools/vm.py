@@ -699,6 +699,7 @@ class VM:
                             "0",
                             log_command_level=logging.DEBUG,
                             ssh_options=[
+                                "-v",
                                 "-oLogLevel=INFO",
                                 "-oConnectTimeout=5",
                                 "-oConnectionAttempts=1",
