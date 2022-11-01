@@ -10,6 +10,7 @@ import logging
 import os
 import pathlib
 import platform
+import pprint
 import random
 import shutil
 import subprocess
@@ -26,8 +27,15 @@ try:
     import attr
     import boto3
     import yaml
-    from rich.progress import Progress
     from botocore.exceptions import ClientError
+    from rich.progress import (
+        BarColumn,
+        Column,
+        Progress,
+        TaskProgressColumn,
+        TextColumn,
+        TimeRemainingColumn,
+    )
 except ImportError:
     print(
         "\nPlease run 'python -m pip install -r "
@@ -78,7 +86,7 @@ vm.add_argument("--region", help="The AWS region.", default="eu-central-1")
 def create(
     ctx: Context,
     name: str,
-    key_name: str = os.environ.get("RUNNER_NAME"),
+    key_name: str = os.environ.get("RUNNER_NAME"),  # type: ignore[assignment]
     instance_type: str = None,
     destroy_on_failure: bool = False,
 ):
@@ -395,10 +403,16 @@ class VM:
         if instance_id_path.exists():
             instance_id = instance_id_path.read_text().strip()
             _instance = self.ec2.Instance(instance_id)
-
-            if _instance.state["Name"] == "running":
-                instance = _instance
-        else:
+            try:
+                if _instance.state["Name"] == "running":
+                    instance = _instance
+            except ClientError as exc:
+                if "InvalidInstanceID.NotFound" not in str(exc):
+                    # This machine no longer exists?!
+                    self.ctx.error(str(exc))
+                    self.ctx.exit(1)
+                instance_id_path.unlink()
+        if not instance_id_path.exists():
             filters = [
                 {"Name": "tag:vm-name", "Values": [self.name]},
                 {"Name": "tag:instance-client-id", "Values": [REPO_CHECKOUT_ID]},
@@ -466,9 +480,15 @@ class VM:
 
             # Grab the public subnet of the vpc used on the template
             client = boto3.client("ec2", region_name=self.region_name)
-            data = client.describe_launch_template_versions(
-                LaunchTemplateName=LAUNCH_TEMPLATE_NAME_FMT.format(self.config.ami)
-            )
+            try:
+                data = client.describe_launch_template_versions(
+                    LaunchTemplateName=LAUNCH_TEMPLATE_NAME_FMT.format(self.config.ami)
+                )
+            except ClientError as exc:
+                if "InvalidLaunchTemplateName.NotFoundException" not in str(exc):
+                    raise
+                self.ctx.error(f"Could not find a launch template for {self.name!r}")
+                self.ctx.exit(1)
             # The newest template comes first
             template_data = data["LaunchTemplateVersions"][0]["LaunchTemplateData"]
             subnet_id = template_data["NetworkInterfaces"][0]["SubnetId"]
@@ -487,6 +507,28 @@ class VM:
                         break
             # Randomly choose one of the subnets
             chosen_public_subnet = random.choice(public_subnets)
+            # Get the develpers security group
+            security_group_filters = [
+                {
+                    "Name": "vpc-id",
+                    "Values": [vpc.id],
+                },
+                {
+                    "Name": "tag:spb:environment",
+                    "Values": ["salt-project"],
+                },
+                {
+                    "Name": "tag:spb:developer",
+                    "Values": ["true"],
+                },
+            ]
+            response = client.describe_security_groups(Filters=security_group_filters)
+            if not response.get("SecurityGroups"):
+                self.ctx.error(
+                    "Could not find the right security group for developers. "
+                    f"Filters:\n{pprint.pformat(security_group_filters)}"
+                )
+                self.ctx.exit(1)
             # Override the launch template network interfaces config
             network_interfaces = [
                 {
@@ -494,21 +536,14 @@ class VM:
                     "DeleteOnTermination": True,
                     "DeviceIndex": 0,
                     "SubnetId": chosen_public_subnet.id,
+                    "Groups": [sg["GroupId"] for sg in response["SecurityGroups"]],
                 }
             ]
 
-        progress = Progress(
-            # transient=True,
-            expand=True,
-        )
+        progress = create_progress_bar()
         create_tast = progress.add_task(
             f"Starting {self!r} in {self.region_name!r} with ssh key named {key_name!r}...",
             total=create_timeout,
-        )
-        connect_task = progress.add_task(
-            "Waiting for ssh connection",
-            start=False,
-            total=ssh_connection_timeout,
         )
 
         tags = [
@@ -587,7 +622,9 @@ class VM:
                     }
                 ],
                 LaunchTemplate={
-                    "LaunchTemplateName": LAUNCH_TEMPLATE_NAME_FMT.format(self.config.ami)
+                    "LaunchTemplateName": LAUNCH_TEMPLATE_NAME_FMT.format(
+                        self.config.ami
+                    )
                 },
             )
             if instance_type:
@@ -601,6 +638,7 @@ class VM:
             try:
                 response = self.ec2.create_instances(**create_kwargs)
             except ClientError as exc:
+                progress.stop()
                 self.ctx.exit(1, str(exc))
             for _instance in response:
                 self.instance = _instance
@@ -640,12 +678,13 @@ class VM:
 
             # Wait until we can SSH into the VM
             host = self.instance.public_ip_address or self.instance.private_ip_address
-            progress.update(
-                connect_task,
-                description=f"Waiting for SSH to become available at {host} ...",
-            )
-            progress.start_task(connect_task)
 
+        progress = create_progress_bar()
+        connect_task = progress.add_task(
+            f"Waiting for SSH to become available at {host} ...",
+            total=ssh_connection_timeout,
+        )
+        with progress:
             proc = None
             checks = 0
             last_error = None
@@ -656,12 +695,14 @@ class VM:
                     stderr = None
                     proc = subprocess.Popen(
                         self.ssh_command_args(
-                            "exit", "0", log_command_level=logging.DEBUG,
+                            "exit",
+                            "0",
+                            log_command_level=logging.DEBUG,
                             ssh_options=[
                                 "-oLogLevel=INFO",
                                 "-oConnectTimeout=5",
                                 "-oConnectionAttempts=1",
-                            ]
+                            ],
                         ),
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
@@ -671,7 +712,12 @@ class VM:
                 checks += 1
                 try:
                     wait_start = time.time()
-                    proc.wait(timeout=1)
+                    proc.wait(timeout=3)
+                    progress.update(
+                        connect_task,
+                        completed=ssh_connection_timeout_progress,
+                        description=f"Waiting for SSH to become available at {host} ...",
+                    )
                     if proc.returncode == 0:
                         progress.update(
                             connect_task,
@@ -679,6 +725,7 @@ class VM:
                             completed=ssh_connection_timeout,
                         )
                         return True
+                    proc.wait(timeout=3)
                     stderr = proc.stderr.read().strip()
                     if stderr:
                         stderr = f" Last Error: {stderr}"
@@ -686,7 +733,9 @@ class VM:
                     proc = None
                     if time.time() - wait_start < 1:
                         # Process exited too fast, sleep a little longer
-                        time.sleep(3)
+                        time.sleep(5)
+                except KeyboardInterrupt:
+                    return
                 except subprocess.TimeoutExpired:
                     pass
 
@@ -713,10 +762,7 @@ class VM:
                 return
             timeout = self.config.terminate_timeout
             timeout_progress = 0
-            progress = Progress(
-                # transient=True,
-                expand=True,
-            )
+            progress = create_progress_bar()
             task = progress.add_task(f"Terminatting {self!r}...", total=timeout)
             self.instance.terminate()
             try:
@@ -949,7 +995,7 @@ class VM:
             ]
         )
         log.info(f"Running {' '.join(cmd)!r}")  # type: ignore[arg-type]
-        progress = Progress(transient=True, expand=True)
+        progress = create_progress_bar(transient=True)
         task = progress.add_task(description, total=100)
         with progress:
             proc = subprocess.Popen(cmd, bufsize=1, stdout=subprocess.PIPE, text=True)
@@ -987,7 +1033,7 @@ class VM:
         pseudo_terminal: bool = False,
         env: list[str] = None,
         log_command_level: int = logging.INFO,
-        ssh_options: list[str] | None = None
+        ssh_options: list[str] | None = None,
     ) -> list[str]:
         ssh = shutil.which("ssh")
         if TYPE_CHECKING:
@@ -1083,3 +1129,16 @@ class VM:
         if self.is_windows:
             return pathlib.PureWindowsPath(r"c:\Windows\Temp\testing")
         return pathlib.Path("/tmp/testing")
+
+
+def create_progress_bar(**kwargs):
+    return Progress(
+        TextColumn(
+            "[progress.description]{task.description}", table_column=Column(ratio=3)
+        ),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeRemainingColumn(),
+        expand=True,
+        **kwargs,
+    )
