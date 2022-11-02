@@ -19,38 +19,6 @@ env:
 
 jobs:
 
-  dependencies:
-    name: Setup Test Dependencies
-    runs-on:
-      - self-hosted
-      - linux
-      - arm64
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v3
-
-      - name: Environment
-        run: |
-          env
-
-      - name: Sleep It Off
-        run: |
-          sleep 5
-
-      - name: Set Exit Status
-        if: always()
-        run: |
-          mkdir exitstatus
-          echo "${{ job.status }}" > exitstatus/${{ github.job }}-${{ inputs.distro-slug }}-deps
-
-      - name: Upload Exit Status
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: exitstatus
-          path: exitstatus
-          if-no-files-found: error
-
   test:
     name: Test
     runs-on:
@@ -58,13 +26,11 @@ jobs:
       - linux
       - bastion
     timeout-minutes: 600  # 10 Hours
-    needs:
-      - dependencies
     strategy:
       fail-fast: false
       matrix:
         tests-chunk:
-          - functional
+          - unit
 
     steps:
       - name: Checkout Source Code
@@ -73,11 +39,6 @@ jobs:
       - name: Test Python Tools Scripts
         run: |
           python3 -c 'import tools'
-
-      - name: Test Python Tools VM Scripts
-        run: |
-          tools vm --help
-          tools vm create --help
 
       - name: Start VM
         run: |

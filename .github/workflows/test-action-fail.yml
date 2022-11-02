@@ -19,65 +19,40 @@ env:
 
 jobs:
 
-  dependencies:
-    name: Setup Test Dependencies
-    runs-on:
-      - self-hosted
-      - linux
-      - aarch64
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v3
-
-      - name: Environment
-        run: |
-          env
-
-      - name: Sleep It Off
-        run: |
-          sleep 60
-
-      - name: Set Exit Status
-        if: always()
-        run: |
-          mkdir exitstatus
-          echo "${{ job.status }}" > exitstatus/${{ github.job }}-${{ inputs.distro-slug }}-deps
-
-      - name: Upload Exit Status
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: exitstatus
-          path: exitstatus
-          if-no-files-found: error
-
   test:
     name: Test
     runs-on:
       - self-hosted
       - linux
-      - arm64
+      - bastion
+      - wrong-label
     timeout-minutes: 600  # 10 Hours
-    needs:
-      - dependencies
     strategy:
       fail-fast: false
       matrix:
         tests-chunk:
           - unit
-          - functional
 
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v3
 
-      - name: Environment
+      - name: Test Python Tools Scripts
         run: |
-          env
+          python3 -c 'import tools'
 
-      - name: Sleep It Off
+      - name: Start VM
         run: |
-          sleep 60
+          tools --debug --timestamps vm create --destroy-on-failure ${{ inputs.distro-slug }}
+
+      - name: Upload Checkout To VM
+        run: |
+          tools --timestamps vm rsync ${{ inputs.distro-slug }}
+
+      - name: Destroy VM
+        if: always()
+        run: |
+          tools --timestamps vm destroy ${{ inputs.distro-slug }}
 
       - name: Set Exit Status
         if: always()
